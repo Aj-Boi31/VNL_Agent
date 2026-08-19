@@ -62,6 +62,14 @@ SPORTSAPIPRO_API_KEY = os.environ.get("SPORTSAPIPRO_API_KEY")
 SPORTSAPIPRO_BASE_URL = "https://api.sportsapipro.com/v2/volleyball"
 SPORTSAPIPRO_HEADERS = {"x-api-key": SPORTSAPIPRO_API_KEY}
 
+# SportsAPI Pro's own search doesn't fuzzy-match these -- a query for
+# Highlightly's name returns zero results, not just a low-ranked one, so the
+# relevance-ranking fallback in resolve_sportsapipro_team_id never gets a
+# candidate to work with. Retry with the known local/official name instead.
+SPORTSAPIPRO_NAME_ALIASES = {
+    "turkey": "Türkiye",
+}
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -341,16 +349,23 @@ def resolve_sportsapipro_team_id(conn, team_name):
     `score`) makes the first match overwhelmingly likely to be correct,
     since the query IS the team name.
     """
-    data = sportsapipro_get("/api/search", params={"q": team_name})
-    results = data.get("data", {}).get("results", [])
+    def search(query):
+        data = sportsapipro_get("/api/search", params={"q": query})
+        results = data.get("data", {}).get("results", [])
+        return [
+            r for r in results
+            if r.get("type") == "team"
+            and r.get("entity", {}).get("sport", {}).get("slug") == "volleyball"
+            and r.get("entity", {}).get("gender") == "M"
+            and r.get("entity", {}).get("national") is True
+        ]
 
-    candidates = [
-        r for r in results
-        if r.get("type") == "team"
-        and r.get("entity", {}).get("sport", {}).get("slug") == "volleyball"
-        and r.get("entity", {}).get("gender") == "M"
-        and r.get("entity", {}).get("national") is True
-    ]
+    candidates = search(team_name)
+
+    if not candidates:
+        alias = SPORTSAPIPRO_NAME_ALIASES.get(team_name.lower())
+        if alias:
+            candidates = search(alias)
 
     if not candidates:
         return None
