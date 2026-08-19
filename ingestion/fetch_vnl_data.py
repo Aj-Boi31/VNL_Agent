@@ -330,22 +330,39 @@ def sportsapipro_get(path, params=None):
 def resolve_sportsapipro_team_id(conn, team_name):
     """Search SportsAPI Pro for this team's ID (a completely different ID
     system than Highlightly's). Filters to volleyball, men's, national
-    teams to avoid matching a same-named club or another sport's team."""
+    teams to avoid matching a same-named club or another sport's team.
+
+    Name matching is intentionally loose: SportsAPI Pro (SofaScore-based)
+    uses official/local country names that don't always match Highlightly's
+    (e.g. "Türkiye" vs "Turkey"), so an exact string match is too strict
+    and silently skips real teams. The sport/gender/national filters do
+    the actual safety work here -- among volleyball+men's+national-team
+    results, the search API's own relevance ranking (already sorted by
+    `score`) makes the first match overwhelmingly likely to be correct,
+    since the query IS the team name.
+    """
     data = sportsapipro_get("/api/search", params={"q": team_name})
     results = data.get("data", {}).get("results", [])
 
-    for r in results:
-        entity = r.get("entity", {})
-        sport = entity.get("sport", {})
-        if (
-            r.get("type") == "team"
-            and sport.get("slug") == "volleyball"
-            and entity.get("gender") == "M"
-            and entity.get("national") is True
-            and entity.get("name", "").lower() == team_name.lower()
-        ):
-            return entity.get("id")
-    return None
+    candidates = [
+        r for r in results
+        if r.get("type") == "team"
+        and r.get("entity", {}).get("sport", {}).get("slug") == "volleyball"
+        and r.get("entity", {}).get("gender") == "M"
+        and r.get("entity", {}).get("national") is True
+    ]
+
+    if not candidates:
+        return None
+
+    # results are pre-sorted by relevance score; take the top match
+    best = candidates[0]
+    entity = best.get("entity", {})
+    matched_name = entity.get("name")
+    if matched_name and matched_name.lower() != team_name.lower():
+        print(f"    (matched '{team_name}' -> SportsAPI Pro's '{matched_name}')")
+
+    return entity.get("id")
 
 
 def ingest_roster(conn, our_team_id, sportsapipro_team_id, team_name):
