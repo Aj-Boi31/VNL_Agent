@@ -4,6 +4,8 @@ A Django app that answers natural-language questions about the 2026 FIVB
 Volleyball Men's Nations League — using a Gemini function-calling agent
 grounded in real match data, not guesses.
 
+![Ask the agent a question and get a grounded answer from real match data](docs/dashboard-demo.png)
+
 **Ask it things like:**
 - "What's Poland's record this season?"
 - "Who's leading the standings?"
@@ -15,6 +17,16 @@ The agent picks the right data function per question, runs it against a
 real SQLite database, and answers from the actual result — including
 correctly declining to answer about teams that aren't in the tournament,
 rather than making something up.
+
+## Contents
+
+- [Why this project](#why-this-project)
+- [Setup](#setup-run-these-on-your-own-machine-in-this-project-folder)
+- [Usage](#usage)
+- [Architecture](#architecture)
+- [Testing](#testing)
+- [Data scope & known limitations](#data-scope--known-limitations)
+- [Status](#status)
 
 ## Why this project
 
@@ -62,37 +74,6 @@ displaying whatever came back:
   one. Fixed with a small alias table that retries the search under the
   known local name when the first query comes up empty.
 
-## Architecture
-
-```
-ingestion/fetch_vnl_data.py   Pulls match + standings data from the
-                               Highlightly Volleyball API into vnl.db
-                               (SQLite). Standings come straight from the
-                               API's own table rather than being
-                               recomputed locally, since VNL's win-points
-                               system isn't a flat 1-point-per-win rule.
-                               Also pulls roster data from a SECOND,
-                               unrelated provider (SportsAPI Pro) -- each
-                               team's cross-provider ID is resolved once
-                               via name search and cached.
-
-agent/queries.py              Five plain Python functions the agent can
-                               call: get_team_results, get_head_to_head,
-                               get_recent_form, get_standings,
-                               get_team_roster. Independent of Django --
-                               run/tested standalone.
-
-agent/gemini_agent.py         Gemini function-calling agent. Passes the
-                               query functions directly as tools (schema
-                               is auto-generated from type hints +
-                               docstrings). Falls back across multiple
-                               free-tier models on quota errors.
-
-tracker/                      Django app: dashboard view (standings) +
-                               an ask-the-agent endpoint the frontend
-                               calls via fetch().
-```
-
 ## Setup (run these on your own machine, in this project folder)
 
 ```bash
@@ -127,17 +108,76 @@ Then visit http://127.0.0.1:8000/
 Keys are loaded automatically from `.env` via `python-dotenv` -- no need to
 `export` them manually each session.
 
-## Project structure
+## Usage
+
+**Web UI** (the intended way to use this): once the dev server is running,
+visit http://127.0.0.1:8000/ for the standings table and the "Ask the
+Agent" box shown in the screenshot above. Requests are CSRF-protected like
+any other Django form POST.
+
+**CLI**, for testing the agent directly without the web layer:
+
+```bash
+python agent/gemini_agent.py
+```
+
+Starts an interactive, multi-turn chat loop in the terminal (`quit` to
+exit) using the same tools and system prompt as the web UI.
+
+**As a library**, the four data functions are plain Python with no Django
+dependency, so they can be called directly:
+
+```python
+from agent.queries import get_team_results
+get_team_results("Poland")
+```
+
+## Architecture
 
 ```
-vnl_agent/          Django project settings
-tracker/             Django app: views, urls, templates, models mapped
-                      to the teams/matches/standings tables
-agent/               queries.py (data functions) + gemini_agent.py
-                      (the function-calling agent)
-ingestion/           fetch_vnl_data.py -- pulls VNL data from Highlightly
-vnl.db                SQLite database (created by ingestion script, gitignored)
+vnl_agent/                    Django project settings, root URLconf.
+
+tracker/                      Django app: dashboard view (standings) +
+                               an ask-the-agent endpoint the frontend
+                               calls via fetch(). Templates live in
+                               tracker/templates/tracker/.
+
+agent/queries.py              Five plain Python functions the agent can
+                               call: get_team_results, get_head_to_head,
+                               get_recent_form, get_standings,
+                               get_team_roster. Independent of Django --
+                               run/tested standalone (see Usage above).
+
+agent/gemini_agent.py         Gemini function-calling agent. Passes the
+                               query functions directly as tools (schema
+                               is auto-generated from type hints +
+                               docstrings). Falls back across multiple
+                               free-tier models on quota errors.
+
+ingestion/fetch_vnl_data.py   Pulls match + standings data from the
+                               Highlightly Volleyball API into vnl.db
+                               (SQLite, gitignored). Standings come
+                               straight from the API's own table rather
+                               than being recomputed locally, since VNL's
+                               win-points system isn't a flat
+                               1-point-per-win rule. Also pulls roster
+                               data from a SECOND, unrelated provider
+                               (SportsAPI Pro) -- each team's
+                               cross-provider ID is resolved once via
+                               name search and cached.
 ```
+
+## Testing
+
+```bash
+python manage.py test
+```
+
+Covers the `ask_agent` endpoint: CSRF enforcement (using
+`Client(enforce_csrf_checks=True)`, since Django's default test client
+disables CSRF checks and would silently hide a regression there), input
+validation, and error passthrough. The Gemini call itself is mocked, so
+tests don't burn API quota.
 
 ## Data scope & known limitations
 
@@ -169,4 +209,5 @@ vnl.db                SQLite database (created by ingestion script, gitignored)
 - [x] Django views + templates (dashboard + ask endpoint)
 - [x] `.env`-based API key handling
 - [x] Player roster data (SportsAPI Pro), verified against real 2026 squad
+- [x] Automated tests for the ask-agent endpoint (CSRF, validation, errors)
 - [ ] Deployment
