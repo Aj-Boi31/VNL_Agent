@@ -11,9 +11,14 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env (GEMINI_API_KEY, HIGHLIGHTLY_API_KEY, etc.) into the process
+# environment. Safe to call even if .env doesn't exist -- just a no-op then.
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production

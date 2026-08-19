@@ -19,6 +19,7 @@ Run interactively:
 import os
 from google import genai
 from google.genai import types
+from dotenv import load_dotenv
 
 from agent.queries import (
     get_team_results,
@@ -26,6 +27,8 @@ from agent.queries import (
     get_recent_form,
     get_standings,
 )
+
+load_dotenv()  # picks up .env in the current working directory
 
 MODEL = "gemini-2.5-flash"
 
