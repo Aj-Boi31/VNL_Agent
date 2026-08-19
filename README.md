@@ -55,6 +55,12 @@ displaying whatever came back:
   out to not even resolve). Player *rosters* (name, position, height,
   weight, age, nationality) were found and verified on SportsAPI Pro and
   are included — see `get_team_roster`.
+- **Cross-provider name mismatches silently dropped a team.** Highlightly
+  and SportsAPI Pro don't share IDs, so team matching happens by name --
+  and SportsAPI Pro indexes Turkey under its local name ("Türkiye"), so a
+  literal `"Turkey"` search returned zero results, not just a low-ranked
+  one. Fixed with a small alias table that retries the search under the
+  known local name when the first query comes up empty.
 
 ## Architecture
 
@@ -95,7 +101,8 @@ pip install -r requirements.txt
 
 # 2. Set up your API keys
 cp .env.example .env
-# then open .env and fill in HIGHLIGHTLY_API_KEY and GEMINI_API_KEY
+# then open .env and fill in HIGHLIGHTLY_API_KEY, GEMINI_API_KEY, and
+# SPORTSAPIPRO_API_KEY
 
 # 3. Pull VNL data into vnl.db (creates the database, 2026 season only)
 python ingestion/fetch_vnl_data.py
@@ -109,9 +116,13 @@ python manage.py runserver
 
 Then visit http://127.0.0.1:8000/
 
-### Getting API keys (both free, no credit card)
+### Getting API keys (all free, no credit card)
 - **Highlightly** (match data): https://highlightly.net/login
 - **Gemini** (the agent): https://aistudio.google.com/apikey
+- **SportsAPI Pro** (player rosters): https://sportsapipro.com — free tier
+  is capped at 100 requests/day; ingestion uses one search + one roster
+  call per team (up to 36/run), so it's easy to burn through the daily
+  cap after a couple of re-runs and start seeing `429` errors
 
 Keys are loaded automatically from `.env` via `python-dotenv` -- no need to
 `export` them manually each session.
