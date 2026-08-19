@@ -23,13 +23,9 @@ points. state.score.current from the API looks like "3 - 1".
 """
 
 import os
-import os
 import sqlite3
 import time
 import requests
-from dotenv import load_dotenv
-
-load_dotenv()  # picks up .env in the current working directory
 from dotenv import load_dotenv
 
 load_dotenv()  # picks up .env in the current working directory
