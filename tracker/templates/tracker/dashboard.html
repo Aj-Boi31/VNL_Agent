@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VNL Data Agent — 2026 Season</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=Inter:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --court-navy: #0B1D33;
+    --court-navy-light: #132A47;
+    --gold: #F2A93B;
+    --off-white: #F5F5F0;
+    --slate: #8AA0BE;
+    --win-green: #4CAF7D;
+    --loss-red: #E1574C;
+    --border: rgba(138, 160, 190, 0.18);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--court-navy);
+    color: var(--off-white);
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.5;
+  }
+
+  .display {
+    font-family: 'Oswald', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  header {
+    padding: 3rem 1.5rem 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .eyebrow {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.15em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin: 0 0 0.5rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    margin: 0 0 0.5rem;
+    line-height: 1.05;
+  }
+
+  header p {
+    color: var(--slate);
+    font-size: 1.05rem;
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+    display: grid;
+    gap: 2.5rem;
+  }
+
+  section h2 {
+    font-family: 'Oswald', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 1.1rem;
+    color: var(--gold);
+    margin: 0 0 1rem;
+  }
+
+  /* Standings table */
+  .standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .standings-table th {
+    text-align: left;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--slate);
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .standings-table td {
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.95rem;
+  }
+
+  .standings-table tr:last-child td { border-bottom: none; }
+
+  .standings-table .pos {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    color: var(--gold);
+    width: 2.5rem;
+  }
+
+  .standings-table .team-name { font-weight: 500; }
+
+  .standings-table td.num { text-align: right; }
+
+  .standings-table tr.top-4 .pos { color: var(--win-green); }
+
+  .error-box {
+    background: var(--court-navy-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    color: var(--slate);
+  }
+
+  /* Ask the agent panel */
+  .agent-panel {
+    background: var(--court-navy-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .agent-form {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .agent-form input[type="text"] {
+    flex: 1;
+    background: var(--court-navy);
+    border: 1px solid var(--border);
+    color: var(--off-white);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+  }
+
+  .agent-form input[type="text"]:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+  }
+
+  .agent-form button {
+    background: var(--gold);
+    color: var(--court-navy);
+    border: none;
+    border-radius: 8px;
+    padding: 0.7rem 1.4rem;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .agent-form button:hover { filter: brightness(1.1); }
+  .agent-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .examples {
+    margin: 0.9rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .example-chip {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--slate);
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.82rem;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .example-chip:hover { border-color: var(--gold); color: var(--gold); }
+
+  .answer-box {
+    margin-top: 1.2rem;
+    padding: 1rem 1.2rem;
+    background: var(--court-navy);
+    border-left: 3px solid var(--gold);
+    border-radius: 4px;
+    display: none;
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+  }
+
+  .answer-box.visible { display: block; }
+  .answer-box.error { border-left-color: var(--loss-red); color: var(--loss-red); }
+
+  .loading-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--gold);
+    border-radius: 50%;
+    animation: pulse 1s infinite ease-in-out;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  footer {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 1.5rem 3rem;
+    color: var(--slate);
+    font-size: 0.8rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading-dot { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">FIVB Men's Volleyball Nations League</p>
+  <h1 class="display">2026 Season Data Agent</h1>
+  <p>Real match data, standings, and an agent that answers questions about it — grounded in actual results, not guesses.</p>
+</header>
+
+<main>
+  <section>
+    <h2>Standings</h2>
+    {% if standings_error %}
+      <div class="error-box">{{ standings_error }}</div>
+    {% else %}
+      <table class="standings-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Team</th>
+            <th class="num">W</th>
+            <th class="num">L</th>
+            <th class="num">Pts</th>
+            <th class="num">GP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in standings %}
+          <tr {% if row.position <= 4 %}class="top-4"{% endif %}>
+            <td class="pos">{{ row.position }}</td>
+            <td class="team-name">{{ row.team }}</td>
+            <td class="num">{{ row.wins }}</td>
+            <td class="num">{{ row.losses }}</td>
+            <td class="num">{{ row.points }}</td>
+            <td class="num">{{ row.games_played }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Ask the Agent</h2>
+    <div class="agent-panel">
+      <form class="agent-form" id="agent-form">
+        {% csrf_token %}
+        <input type="text" id="question-input" placeholder="e.g. What's Poland's record this season?" autocomplete="off">
+        <button type="submit" id="ask-button">Ask</button>
+      </form>
+      <div class="examples">
+        <button type="button" class="example-chip" data-q="Who's leading the standings?">Who's leading the standings?</button>
+        <button type="button" class="example-chip" data-q="How has Japan played in their last 5 games?">Japan's recent form</button>
+        <button type="button" class="example-chip" data-q="Poland vs Japan head to head">Poland vs Japan</button>
+        <button type="button" class="example-chip" data-q="Did Japan make it to the finals?">Did Japan make the finals?</button>
+      </div>
+      <div class="answer-box" id="answer-box"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Data via Highlightly Volleyball API. Scoped to the 2026 season (verified complete: 116/116 matches).
+</footer>
+
+<script>
+  const form = document.getElementById('agent-form');
+  const input = document.getElementById('question-input');
+  const button = document.getElementById('ask-button');
+  const answerBox = document.getElementById('answer-box');
+  const chips = document.querySelectorAll('.example-chip');
+
+  function getCookie(name) {
+    const match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return match ? match.pop() : '';
+  }
+
+  async function askAgent(question) {
+    answerBox.classList.remove('visible', 'error');
+    button.disabled = true;
+    button.textContent = 'Asking';
+    answerBox.innerHTML = '<span class="loading-dot"></span> Checking the data...';
+    answerBox.classList.add('visible');
+
+    try {
+      const res = await fetch("{% url 'tracker:ask_agent' %}", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        answerBox.textContent = data.error || 'Something went wrong.';
+        answerBox.classList.add('error');
+      } else {
+        answerBox.textContent = data.answer;
+      }
+    } catch (err) {
+      answerBox.textContent = 'Network error — is the server running?';
+      answerBox.classList.add('error');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Ask';
+    }
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (q) askAgent(q);
+  });
+
+  chips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      input.value = chip.dataset.q;
+      askAgent(chip.dataset.q);
+    });
+  });
+</script>
+
+</body>
+</html>
