@@ -18,7 +18,7 @@ Run interactively:
 
 import os
 from google import genai
-from google.genai import types
+from google.genai import types, errors
 from dotenv import load_dotenv
 
 from agent.queries import (
@@ -30,9 +30,29 @@ from agent.queries import (
 
 load_dotenv()  # picks up .env in the current working directory
 
-# Gemini model names get retired periodically -- override via env var if this
-# one stops working (e.g. export GEMINI_MODEL="gemini-X-flash").
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+# Gemini's free-tier quota is tracked per model, per project -- so if one
+# model runs out for the day, a *different* model still has its own
+# untouched quota bucket. This chain tries each in order and only moves to
+# the next on a 429 (quota/rate limit), effectively multiplying the usable
+# free daily budget at no cost.
+#
+# Override with a comma-separated list via GEMINI_MODEL_CHAIN, e.g.:
+#   GEMINI_MODEL_CHAIN=gemini-3.5-flash-lite,gemini-3.6-flash
+#
+# GEMINI_MODEL (singular, legacy) is still honored and takes priority as
+# the first model tried, for backwards compatibility.
+_default_chain = "gemini-3.5-flash-lite,gemini-3.6-flash,gemini-2.5-flash-lite,gemini-3.1-flash-lite"
+_chain_env = os.environ.get("GEMINI_MODEL_CHAIN", _default_chain)
+MODEL_CHAIN = [m.strip() for m in _chain_env.split(",") if m.strip()]
+
+_legacy_model = os.environ.get("GEMINI_MODEL")
+if _legacy_model and _legacy_model not in MODEL_CHAIN:
+    MODEL_CHAIN.insert(0, _legacy_model)
+elif _legacy_model in MODEL_CHAIN:
+    MODEL_CHAIN.remove(_legacy_model)
+    MODEL_CHAIN.insert(0, _legacy_model)
+
+MODEL = MODEL_CHAIN[0]  # kept for backwards compatibility / display purposes
 
 SYSTEM_INSTRUCTION = """You are a VNL (FIVB Volleyball Men's Nations League) data
 assistant. You answer questions about the 2026 season using the provided
@@ -63,7 +83,7 @@ def _get_client():
     return genai.Client(api_key=api_key)
 
 
-def new_chat(client):
+def new_chat(client, model=None):
     """Start a new chat session with the agent's tools and system instruction
     wired up. Automatic function calling runs through chat.send_message,
     per Google's current recommendation (calling AFC via generate_content
@@ -78,8 +98,9 @@ def new_chat(client):
     effort is mostly wasted latency here. LOW keeps enough reasoning to
     reliably pick the right tool while cutting response time noticeably.
     """
+    model = model or MODEL
     return client.chats.create(
-        model=MODEL,
+        model=model,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
             tools=TOOLS,
@@ -88,24 +109,52 @@ def new_chat(client):
     )
 
 
+def _raw_send(chat, question: str) -> str:
+    """Send a message with no error translation -- lets ClientError (incl.
+    429s) propagate so callers can decide whether to retry with a
+    different model."""
+    response = chat.send_message(question)
+    return response.text
+
+
+def _send(chat, question: str) -> str:
+    """Send a message and translate a 429 into a clear, user-facing message.
+    Used by main() where there's no model fallback chain to fall back on
+    (a chat's conversation history is tied to one specific model)."""
+    try:
+        return _raw_send(chat, question)
+    except errors.ClientError as e:
+        if e.code == 429:
+            raise RuntimeError(
+                "The free Gemini quota for this model has been used up for today "
+                "(or this minute). Check your live limits at https://aistudio.google.com/, "
+                "or try again shortly / tomorrow."
+            ) from e
+        raise
+
+
 def ask(question: str, chat=None) -> str:
     """Ask the agent a natural-language question. Returns the final text answer.
 
-    If no chat session is passed in, opens a short-lived client + chat for
-    just this one question (used by the Django view, where each HTTP
-    request is independent). For multi-turn conversations, create a chat
-    with new_chat() once and reuse it across calls -- see main() below.
+    If no chat session is passed in, opens a short-lived client for just
+    this one question and tries each model in MODEL_CHAIN in order,
+    moving to the next only on a 429 (quota exhausted for that model).
+    This is what the Django view uses -- each HTTP request is independent,
+    so there's no multi-turn history to preserve across a model switch.
+
+    If a chat IS passed in (see new_chat() + main() below, for multi-turn
+    CLI use), no fallback happens -- the chat's history is tied to one
+    model, so switching mid-conversation isn't possible without losing
+    that context.
 
     Note on the `with` block: recent google-genai versions (1.39.0+) close
     their underlying HTTP client when the Client object is garbage
-    collected. If the client isn't kept alive for the full duration of the
-    request, you can hit "Cannot send a request, as the client has been
-    closed." Wrapping usage in `with genai.Client(...) as client:` is
-    Google's documented fix. See: https://github.com/googleapis/python-genai/issues/1763
+    collected. Wrapping usage in `with genai.Client(...) as client:` is
+    Google's documented fix for "Cannot send a request, as the client has
+    been closed." See: https://github.com/googleapis/python-genai/issues/1763
     """
     if chat is not None:
-        response = chat.send_message(question)
-        return response.text
+        return _send(chat, question)
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -114,10 +163,25 @@ def ask(question: str, chat=None) -> str:
             "Get a free key at https://aistudio.google.com/apikey and set it before running this script."
         )
 
+    last_error = None
     with genai.Client(api_key=api_key) as client:
-        one_off_chat = new_chat(client)
-        response = one_off_chat.send_message(question)
-        return response.text
+        for model in MODEL_CHAIN:
+            try:
+                one_off_chat = new_chat(client, model=model)
+                return _raw_send(one_off_chat, question)
+            except errors.ClientError as e:
+                if e.code == 429:
+                    last_error = e
+                    continue  # try the next model in the chain
+                raise
+
+    # every model in the chain was rate-limited/out of quota
+    tried = ", ".join(MODEL_CHAIN)
+    raise RuntimeError(
+        f"All free-tier models are currently rate-limited or out of quota today "
+        f"(tried: {tried}). Check your live limits at https://aistudio.google.com/, "
+        f"or try again shortly / tomorrow."
+    ) from last_error
 
 
 def main():
