@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 
 from agent.queries import (
     get_team_results,
+    get_team_roster,
     get_head_to_head,
     get_recent_form,
     get_standings,
@@ -68,9 +69,15 @@ Note: `get_team_results` includes finals-bracket matches, so a team's
 record there may look different from `get_standings` (which only reflects
 the 12-game preliminary round). If this discrepancy is relevant to the
 question, briefly explain why.
+
+`get_team_roster` returns player name, position, height, weight, age, and
+nationality only. It does NOT include individual performance statistics
+(kills, blocks, aces, digs, points, etc.) -- that data isn't available in
+this system. If asked for a player's stats, say so plainly rather than
+guessing or estimating.
 """
 
-TOOLS = [get_team_results, get_head_to_head, get_recent_form, get_standings]
+TOOLS = [get_team_results, get_head_to_head, get_recent_form, get_standings, get_team_roster]
 
 
 def _get_client():

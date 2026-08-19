@@ -275,6 +275,65 @@ def get_standings() -> dict:
         conn.close()
 
 
+def get_team_roster(team: str) -> dict:
+    """A team's current VNL roster: player name, position, height, weight,
+    age, and nationality.
+
+    Note: this does NOT include individual performance statistics (kills,
+    blocks, aces, digs, etc.) -- that data was checked across multiple
+    providers (SportsAPI Pro, Sportradar, TheSportsDB, and FIVB's own
+    site) and confirmed unavailable anywhere. If asked for stats like
+    kills or aces per player, say so plainly rather than guessing.
+
+    Args:
+        team: team name, e.g. "Poland" or "Japan". Partial names work.
+
+    Returns:
+        dict with the team name and a list of roster players.
+    """
+    conn = _connect()
+    try:
+        team_id, canonical_name = _find_team_id(conn, team)
+        if not team_id:
+            return {"error": f"No team found matching '{team}'."}
+
+        rows = conn.execute(
+            """
+            SELECT name, position, height_cm, weight_kg, jersey_number,
+                   date_of_birth, country
+            FROM players
+            WHERE team_id = ?
+            ORDER BY CAST(jersey_number AS INTEGER)
+            """,
+            (team_id,),
+        ).fetchall()
+
+        if not rows:
+            return {
+                "error": (
+                    f"No roster data found for {canonical_name}. Roster data is "
+                    "pulled separately from match data and may not be ingested yet."
+                )
+            }
+
+        roster = [
+            {
+                "name": r["name"],
+                "position": r["position"],
+                "height_cm": r["height_cm"],
+                "weight_kg": r["weight_kg"],
+                "jersey_number": r["jersey_number"],
+                "date_of_birth": r["date_of_birth"],
+                "country": r["country"],
+            }
+            for r in rows
+        ]
+
+        return {"team": canonical_name, "roster": roster}
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     # Quick manual smoke test -- run directly with `python agent/queries.py`
     import json
@@ -290,3 +349,6 @@ if __name__ == "__main__":
 
     print("\n=== get_recent_form('Poland') ===")
     print(json.dumps(get_recent_form("Poland"), indent=2)[:1000])
+
+    print("\n=== get_team_roster('Poland') ===")
+    print(json.dumps(get_team_roster("Poland"), indent=2)[:1000])

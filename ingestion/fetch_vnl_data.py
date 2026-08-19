@@ -46,6 +46,22 @@ HEADERS = {
 
 PAGE_LIMIT = 100  # API max per page for /matches
 
+# --- Roster data (separate provider: SportsAPI Pro) ---
+# Highlightly doesn't expose player-level data at all. SportsAPI Pro does
+# have real, verified team rosters (confirmed manually against Poland's
+# actual 2026 squad) -- but it uses a completely different team ID system
+# than Highlightly, so each team's SportsAPI Pro ID has to be resolved by
+# name search once and cached in teams.sportsapipro_id.
+#
+# Individual PLAYER STATISTICS (kills, blocks, aces, etc.) were checked and
+# confirmed NOT available through this or any other provider we tested
+# (SportsAPI Pro, Sportradar, TheSportsDB, or FIVB's own site) -- see
+# README "Data scope & known limitations". This only pulls roster/profile
+# data: name, position, height, weight, age, nationality.
+SPORTSAPIPRO_API_KEY = os.environ.get("SPORTSAPIPRO_API_KEY")
+SPORTSAPIPRO_BASE_URL = "https://api.sportsapipro.com/v2/volleyball"
+SPORTSAPIPRO_HEADERS = {"x-api-key": SPORTSAPIPRO_API_KEY}
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -60,7 +76,8 @@ def create_tables(conn):
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE NOT NULL,
             country TEXT,
-            badge_url TEXT
+            badge_url TEXT,
+            sportsapipro_id INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS matches (
@@ -93,8 +110,26 @@ def create_tables(conn):
             PRIMARY KEY (season, team_id),
             FOREIGN KEY (team_id) REFERENCES teams(id)
         );
+
+        CREATE TABLE IF NOT EXISTS players (
+            id INTEGER PRIMARY KEY,
+            team_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            position TEXT,
+            height_cm INTEGER,
+            weight_kg INTEGER,
+            jersey_number TEXT,
+            date_of_birth TEXT,
+            country TEXT,
+            FOREIGN KEY (team_id) REFERENCES teams(id)
+        );
         """
     )
+    # Migration: add sportsapipro_id to teams if this vnl.db predates it
+    # (CREATE TABLE IF NOT EXISTS above won't alter an existing table).
+    existing_cols = [row[1] for row in conn.execute("PRAGMA table_info(teams)")]
+    if "sportsapipro_id" not in existing_cols:
+        conn.execute("ALTER TABLE teams ADD COLUMN sportsapipro_id INTEGER")
     conn.commit()
 
 
@@ -278,6 +313,122 @@ def ingest_standings(conn, league_id, season):
     print(f"Season {season}: {total} standings rows upserted")
 
 
+def sportsapipro_get(path, params=None):
+    if not SPORTSAPIPRO_API_KEY:
+        raise RuntimeError(
+            "SPORTSAPIPRO_API_KEY environment variable is not set. "
+            "Get a free key at https://sportsapipro.com and set it before running this script."
+        )
+    resp = requests.get(
+        f"{SPORTSAPIPRO_BASE_URL}{path}", params=params or {},
+        headers=SPORTSAPIPRO_HEADERS, timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def resolve_sportsapipro_team_id(conn, team_name):
+    """Search SportsAPI Pro for this team's ID (a completely different ID
+    system than Highlightly's). Filters to volleyball, men's, national
+    teams to avoid matching a same-named club or another sport's team."""
+    data = sportsapipro_get("/api/search", params={"q": team_name})
+    results = data.get("data", {}).get("results", [])
+
+    for r in results:
+        entity = r.get("entity", {})
+        sport = entity.get("sport", {})
+        if (
+            r.get("type") == "team"
+            and sport.get("slug") == "volleyball"
+            and entity.get("gender") == "M"
+            and entity.get("national") is True
+            and entity.get("name", "").lower() == team_name.lower()
+        ):
+            return entity.get("id")
+    return None
+
+
+def ingest_roster(conn, our_team_id, sportsapipro_team_id, team_name):
+    """Pulls the current national-team roster for one team.
+
+    Uses `nationalPlayers`, not the top-level `players` array -- the
+    latter mixes in domestic club players who share the same nationality
+    but aren't actually on the current VNL squad (confirmed by manually
+    inspecting Poland's response: `players` included PlusLiga club-only
+    players, while `nationalPlayers` correctly filtered to the roster
+    tagged national=true under the Nations League team).
+
+    Does NOT include individual performance statistics (kills, blocks,
+    aces, etc.) -- confirmed unavailable through this or any other
+    provider checked. See README "Data scope & known limitations".
+    """
+    data = sportsapipro_get(f"/api/teams/{sportsapipro_team_id}/players")
+    national_players = data.get("data", {}).get("nationalPlayers", [])
+
+    conn.execute("DELETE FROM players WHERE team_id = ?", (our_team_id,))
+
+    for entry in national_players:
+        p = entry.get("player", {})
+        conn.execute(
+            """
+            INSERT INTO players (id, team_id, name, position, height_cm,
+                                  weight_kg, jersey_number, date_of_birth, country)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                team_id=excluded.team_id,
+                name=excluded.name,
+                position=excluded.position,
+                height_cm=excluded.height_cm,
+                weight_kg=excluded.weight_kg,
+                jersey_number=excluded.jersey_number,
+                date_of_birth=excluded.date_of_birth,
+                country=excluded.country
+            """,
+            (
+                p.get("id"), our_team_id, p.get("name"), p.get("position"),
+                p.get("height"), p.get("weight"), p.get("jerseyNumber"),
+                p.get("dateOfBirth"), (p.get("country") or {}).get("name"),
+            ),
+        )
+
+    conn.commit()
+    print(f"  {team_name}: {len(national_players)} roster players upserted")
+
+
+def ingest_all_rosters(conn):
+    """For every team already in our DB (from Highlightly), resolve its
+    SportsAPI Pro ID (once, cached) and pull its current roster.
+
+    This costs up to 2 API calls per team (1 search + 1 roster) on a
+    SEPARATE free tier from Highlightly's -- run this deliberately, not
+    as part of routine re-ingestion, since it's a real chunk of quota."""
+    if not SPORTSAPIPRO_API_KEY:
+        print("SPORTSAPIPRO_API_KEY not set -- skipping roster ingestion.")
+        return
+
+    teams = conn.execute("SELECT id, name, sportsapipro_id FROM teams").fetchall()
+    print(f"\nIngesting rosters for {len(teams)} teams (SportsAPI Pro)...")
+
+    for our_id, name, sportsapipro_id in teams:
+        try:
+            if sportsapipro_id is None:
+                sportsapipro_id = resolve_sportsapipro_team_id(conn, name)
+                if sportsapipro_id is None:
+                    print(f"  {name}: could not resolve SportsAPI Pro team ID, skipping")
+                    continue
+                conn.execute(
+                    "UPDATE teams SET sportsapipro_id = ? WHERE id = ?",
+                    (sportsapipro_id, our_id),
+                )
+                conn.commit()
+                time.sleep(0.5)
+
+            ingest_roster(conn, our_id, sportsapipro_id, name)
+            time.sleep(0.5)
+        except requests.RequestException as e:
+            print(f"  {name}: failed to fetch roster: {e}")
+
+
 def main():
     conn = get_connection()
     create_tables(conn)
@@ -296,9 +447,12 @@ def main():
             print(f"Failed to fetch season {season}: {e}")
         time.sleep(0.5)
 
+    ingest_all_rosters(conn)
+
     team_count = conn.execute("SELECT COUNT(*) FROM teams").fetchone()[0]
     match_count = conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
-    print(f"\nDone. teams={team_count} matches={match_count} -> {DB_PATH}")
+    player_count = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+    print(f"\nDone. teams={team_count} matches={match_count} players={player_count} -> {DB_PATH}")
     conn.close()
 
 

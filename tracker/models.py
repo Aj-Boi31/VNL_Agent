@@ -7,6 +7,7 @@ class Team(models.Model):
     name = models.CharField(max_length=200, unique=True)
     country = models.CharField(max_length=100, blank=True, null=True)
     badge_url = models.CharField(max_length=500, blank=True, null=True)
+    sportsapipro_id = models.IntegerField(null=True, blank=True)  # cross-provider ID for roster lookups
 
     class Meta:
         managed = False  # Django won't create/alter this table; ingestion script owns it
@@ -62,3 +63,27 @@ class Standing(models.Model):
 
     def __str__(self):
         return f"{self.season} #{self.position} {self.team}"
+
+
+class Player(models.Model):
+    """Maps to the existing `players` table -- roster/profile data from
+    SportsAPI Pro (a different provider than matches/standings). Does NOT
+    include individual performance statistics (kills, blocks, aces, etc.)
+    -- confirmed unavailable through every provider checked. See README
+    "Data scope & known limitations"."""
+    id = models.IntegerField(primary_key=True)  # SportsAPI Pro's own player id
+    team = models.ForeignKey(Team, on_delete=models.DO_NOTHING, db_column="team_id")
+    name = models.CharField(max_length=200)
+    position = models.CharField(max_length=10, blank=True, null=True)  # e.g. OH, MB, S, L, O
+    height_cm = models.IntegerField(null=True, blank=True)
+    weight_kg = models.IntegerField(null=True, blank=True)
+    jersey_number = models.CharField(max_length=10, blank=True, null=True)
+    date_of_birth = models.CharField(max_length=40, blank=True, null=True)  # stored as ISO string
+    country = models.CharField(max_length=100, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "players"
+
+    def __str__(self):
+        return f"{self.name} ({self.team})"

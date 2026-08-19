@@ -9,6 +9,7 @@ grounded in real match data, not guesses.
 - "Who's leading the standings?"
 - "How has Japan played in their last 5 games?"
 - "Did the higher seed win every time Poland and Japan met?"
+- "Who's on Poland's roster?"
 
 The agent picks the right data function per question, runs it against a
 real SQLite database, and answers from the actual result — including
@@ -44,31 +45,47 @@ displaying whatever came back:
   models in order, falling through to the next only on a real quota
   error — since Gemini's free-tier daily limits are tracked per model,
   this multiplies the usable daily budget at no cost.
+- **Player-level stats were checked and confirmed unavailable.** Six
+  sources were tested directly (not just read about) before concluding
+  individual performance stats (kills, blocks, aces) aren't accessible
+  anywhere on a free tier: TheSportsDB, Highlightly, SportsAPI Pro,
+  Sportradar's own published data dictionary, FIVB's official stats page
+  (server-rendered HTML, no API behind it, confirmed via live network
+  inspection), and SportDevs (whose documented volleyball endpoint turned
+  out to not even resolve). Player *rosters* (name, position, height,
+  weight, age, nationality) were found and verified on SportsAPI Pro and
+  are included — see `get_team_roster`.
 
 ## Architecture
 
-ingestion/fetch_vnl_data.py Pulls match + standings data from the
-Highlightly Volleyball API into vnl.db
-(SQLite). Standings come straight from the
-API's own table rather than being
-recomputed locally, since VNL's win-points
-system isn't a flat 1-point-per-win rule.
+```
+ingestion/fetch_vnl_data.py   Pulls match + standings data from the
+                               Highlightly Volleyball API into vnl.db
+                               (SQLite). Standings come straight from the
+                               API's own table rather than being
+                               recomputed locally, since VNL's win-points
+                               system isn't a flat 1-point-per-win rule.
+                               Also pulls roster data from a SECOND,
+                               unrelated provider (SportsAPI Pro) -- each
+                               team's cross-provider ID is resolved once
+                               via name search and cached.
 
-agent/queries.py Four plain Python functions the agent can
-call: get_team_results, get_head_to_head,
-get_recent_form, get_standings. Independent
-of Django -- run/tested standalone.
+agent/queries.py              Five plain Python functions the agent can
+                               call: get_team_results, get_head_to_head,
+                               get_recent_form, get_standings,
+                               get_team_roster. Independent of Django --
+                               run/tested standalone.
 
-agent/gemini_agent.py Gemini function-calling agent. Passes the
-query functions directly as tools (schema
-is auto-generated from type hints +
-docstrings). Falls back across multiple
-free-tier models on quota errors.
+agent/gemini_agent.py         Gemini function-calling agent. Passes the
+                               query functions directly as tools (schema
+                               is auto-generated from type hints +
+                               docstrings). Falls back across multiple
+                               free-tier models on quota errors.
 
-tracker/ Django app: dashboard view (standings) +
-an ask-the-agent endpoint the frontend
-calls via fetch().
-
+tracker/                      Django app: dashboard view (standings) +
+                               an ask-the-agent endpoint the frontend
+                               calls via fetch().
+```
 
 ## Setup (run these on your own machine, in this project folder)
 
@@ -100,11 +117,45 @@ Keys are loaded automatically from `.env` via `python-dotenv` -- no need to
 `export` them manually each session.
 
 ## Project structure
-vnl_agent/ Django project settings
-tracker/ Django app: views, urls, templates, models mapped
-to the teams/matches/standings tables
-agent/ queries.py (data functions) + gemini_agent.py
-(the function-calling agent)
-ingestion/ fetch_vnl_data.py -- pulls VNL data from Highlightly
-vnl.db SQLite database (created by ingestion script, gitignored)
 
+```
+vnl_agent/          Django project settings
+tracker/             Django app: views, urls, templates, models mapped
+                      to the teams/matches/standings tables
+agent/               queries.py (data functions) + gemini_agent.py
+                      (the function-calling agent)
+ingestion/           fetch_vnl_data.py -- pulls VNL data from Highlightly
+vnl.db                SQLite database (created by ingestion script, gitignored)
+```
+
+## Data scope & known limitations
+
+- Scoped to the **2026 men's VNL season only**. 2024/2025 were dropped
+  after discovering incomplete match coverage on the free API tier
+  (80/104 and 89/116 matches respectively) -- shipping known-incomplete
+  data seemed worse than a smaller, verified-correct dataset.
+- `get_team_results` includes finals-bracket matches; `get_standings`
+  reflects only the 12-game preliminary round (matching the official VNL
+  table). A team's record can legitimately look different between the
+  two -- the agent is prompted to explain this when it's relevant to the
+  question asked.
+- Round/week labels aren't populated by the current data source.
+- **No individual player performance statistics** (kills, blocks, aces,
+  digs, points, serve/reception %). Checked directly against six sources
+  -- TheSportsDB, Highlightly, SportsAPI Pro, Sportradar's own published
+  statistics schema, FIVB's official stats page (confirmed via live
+  browser network inspection to be server-rendered HTML with no API
+  behind it), and SportDevs (documented endpoint, but the domain itself
+  doesn't resolve) -- and confirmed unavailable on any free tier. Player
+  rosters (name, position, height, weight, age, nationality) ARE
+  available and included via `get_team_roster`.
+
+## Status
+
+- [x] Data pipeline (Highlightly API, 2026 season, verified complete)
+- [x] Query functions, tested against real data
+- [x] Gemini function-calling agent, tested multi-turn, with model fallback
+- [x] Django views + templates (dashboard + ask endpoint)
+- [x] `.env`-based API key handling
+- [x] Player roster data (SportsAPI Pro), verified against real 2026 squad
+- [ ] Deployment
