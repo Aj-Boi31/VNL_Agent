@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VNL Data Agent — 2026 Season</title>
+<meta name="description" content="Live standings and a Q&A agent for the 2026 FIVB Volleyball Men's Nations League, grounded in real match data.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=Inter:ital@0;1&display=swap" rel="stylesheet">
 <style>
@@ -26,6 +27,25 @@
     color: var(--off-white);
     font-family: 'Inter', system-ui, sans-serif;
     line-height: 1.5;
+  }
+
+  a { color: var(--gold); }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
   }
 
   .display {
@@ -81,8 +101,14 @@
   }
 
   /* Standings table */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .standings-table {
     width: 100%;
+    min-width: 420px;
     border-collapse: collapse;
     font-variant-numeric: tabular-nums;
   }
@@ -137,11 +163,13 @@
 
   .agent-form {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.6rem;
   }
 
   .agent-form input[type="text"] {
-    flex: 1;
+    flex: 1 1 220px;
+    min-width: 0;
     background: var(--court-navy);
     border: 1px solid var(--border);
     color: var(--off-white);
@@ -201,7 +229,9 @@
     border-radius: 4px;
     display: none;
     white-space: pre-wrap;
+    overflow-wrap: break-word;
     font-size: 0.95rem;
+    line-height: 1.6;
   }
 
   .answer-box.visible { display: block; }
@@ -231,6 +261,14 @@
   @media (prefers-reduced-motion: reduce) {
     .loading-dot { animation: none; }
   }
+
+  @media (max-width: 600px) {
+    header { padding: 2rem 1.25rem 1.5rem; }
+    main { padding: 1.75rem 1.25rem 3rem; gap: 2rem; }
+    .agent-panel { padding: 1.1rem; }
+    .standings-table th,
+    .standings-table td { padding: 0.55rem 0.6rem; }
+  }
 </style>
 </head>
 <body>
@@ -247,30 +285,33 @@
     {% if standings_error %}
       <div class="error-box">{{ standings_error }}</div>
     {% else %}
-      <table class="standings-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Team</th>
-            <th class="num">W</th>
-            <th class="num">L</th>
-            <th class="num">Pts</th>
-            <th class="num">GP</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in standings %}
-          <tr {% if row.position <= 4 %}class="top-4"{% endif %}>
-            <td class="pos">{{ row.position }}</td>
-            <td class="team-name">{{ row.team }}</td>
-            <td class="num">{{ row.wins }}</td>
-            <td class="num">{{ row.losses }}</td>
-            <td class="num">{{ row.points }}</td>
-            <td class="num">{{ row.games_played }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="standings-table">
+          <caption class="sr-only">2026 VNL preliminary-round standings, top 4 advance to finals</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Team</th>
+              <th scope="col" class="num">W</th>
+              <th scope="col" class="num">L</th>
+              <th scope="col" class="num">Pts</th>
+              <th scope="col" class="num">GP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in standings %}
+            <tr {% if row.position <= 4 %}class="top-4"{% endif %}>
+              <td class="pos">{{ row.position }}</td>
+              <td class="team-name">{{ row.team }}</td>
+              <td class="num">{{ row.wins }}</td>
+              <td class="num">{{ row.losses }}</td>
+              <td class="num">{{ row.points }}</td>
+              <td class="num">{{ row.games_played }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% endif %}
   </section>
 
@@ -279,6 +320,7 @@
     <div class="agent-panel">
       <form class="agent-form" id="agent-form">
         {% csrf_token %}
+        <label for="question-input" class="sr-only">Ask a question about the 2026 VNL season</label>
         <input type="text" id="question-input" placeholder="e.g. What's Poland's record this season?" autocomplete="off">
         <button type="submit" id="ask-button">Ask</button>
       </form>
@@ -288,7 +330,7 @@
         <button type="button" class="example-chip" data-q="Poland vs Japan head to head">Poland vs Japan</button>
         <button type="button" class="example-chip" data-q="Did Japan make it to the finals?">Did Japan make the finals?</button>
       </div>
-      <div class="answer-box" id="answer-box"></div>
+      <div class="answer-box" id="answer-box" role="status" aria-live="polite"></div>
     </div>
   </section>
 </main>
