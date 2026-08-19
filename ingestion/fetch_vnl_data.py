@@ -21,7 +21,16 @@ import requests
 LEAGUE_ID = "5083"
 SEASONS = ["2024", "2025", "2026"]
 DB_PATH = "vnl.db"
-BASE_URL = "https://www.thesportsdb.com/api/v1/json/3"
+BASE_URL = "https://www.thesportsdb.com/api/v1/json/123"  # "123" = current free/test key ("3" is retired)
+
+HEADERS = {
+    # TheSportsDB (behind Cloudflare) 403s requests with no browser-like
+    # User-Agent -- the default requests UA gets blocked.
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+}
 
 
 def get_connection():
@@ -73,7 +82,7 @@ def get_or_create_team(conn, name):
 def fetch_season(season):
     url = f"{BASE_URL}/eventsseason.php"
     params = {"id": LEAGUE_ID, "s": season}
-    resp = requests.get(url, params=params, timeout=20)
+    resp = requests.get(url, params=params, headers=HEADERS, timeout=20)
     resp.raise_for_status()
     return resp.json().get("events") or []
 
