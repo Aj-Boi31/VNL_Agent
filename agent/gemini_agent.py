@@ -72,12 +72,18 @@ def new_chat(client):
     `client` must be kept alive (e.g. via a `with` block) for as long as
     this chat is used -- see the module-level note on the httpx
     "client is closed" issue.
+
+    thinking_level is set to LOW: this task is simple (pick 1 of 4 known
+    tools, format a short answer), so the model's default "medium" reasoning
+    effort is mostly wasted latency here. LOW keeps enough reasoning to
+    reliably pick the right tool while cutting response time noticeably.
     """
     return client.chats.create(
         model=MODEL,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
             tools=TOOLS,
+            thinking_config=types.ThinkingConfig(thinking_level="LOW"),
         ),
     )
 
