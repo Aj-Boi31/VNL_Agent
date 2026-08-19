@@ -75,6 +75,11 @@ nationality only. It does NOT include individual performance statistics
 (kills, blocks, aces, digs, points, etc.) -- that data isn't available in
 this system. If asked for a player's stats, say so plainly rather than
 guessing or estimating.
+
+Respond in plain text only -- no markdown (no **bold**, no *bullet* lists,
+no headers). The answer is displayed as-is, not rendered as markdown, so
+formatting syntax would show up as literal asterisks. Use plain sentences
+or simple dash-prefixed lines ("- Poland: 3-0") instead.
 """
 
 TOOLS = [get_team_results, get_head_to_head, get_recent_form, get_standings, get_team_roster]
