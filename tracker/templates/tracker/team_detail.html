@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VNL Data Agent — 2026 Season</title>
+<title>{{ team_name }} — VNL 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=Inter:ital@0;1&display=swap" rel="stylesheet">
 {% load static %}
@@ -12,41 +12,37 @@
 <body>
 
 <header>
-  <p class="eyebrow">FIVB Men's Volleyball Nations League</p>
-  <h1 class="display">2026 Season Data Agent</h1>
-  <p class="subtitle">Real match data, standings, and an agent that answers questions about it — grounded in actual results, not guesses.</p>
+  <a href="{% url 'tracker:dashboard' %}" class="back-link">&larr; Standings</a>
+  <p class="eyebrow">FIVB Men's Volleyball Nations League — 2026</p>
+  <div class="team-header">
+    <h1 class="display">{{ team_name }}</h1>
+    {% if standing %}
+      <span class="record">
+        <strong>{{ standing.wins }}–{{ standing.losses }}</strong> · #{{ standing.position }} in standings
+      </span>
+    {% endif %}
+  </div>
 </header>
 
 <main>
   <section>
-    <h2>Standings</h2>
-    {% if standings_error %}
-      <div class="error-box">{{ standings_error }}</div>
+    <h2>Roster</h2>
+    {% if roster_error %}
+      <div class="error-box">{{ roster_error }}</div>
     {% else %}
-      <table class="standings-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Team</th>
-            <th class="num">W</th>
-            <th class="num">L</th>
-            <th class="num">Pts</th>
-            <th class="num">GP</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in standings %}
-          <tr {% if row.position <= 4 %}class="top-4"{% endif %}>
-            <td class="pos">{{ row.position }}</td>
-            <td class="team-name"><a href="{% url 'tracker:team_detail' row.team %}">{{ row.team }}</a></td>
-            <td class="num">{{ row.wins }}</td>
-            <td class="num">{{ row.losses }}</td>
-            <td class="num">{{ row.points }}</td>
-            <td class="num">{{ row.games_played }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="roster-grid">
+        {% for p in roster %}
+        <div class="player-card">
+          <div class="jersey">#{{ p.jersey_number }}</div>
+          <div class="player-name">{{ p.name }}</div>
+          <div class="player-meta">
+            {% if p.position %}<span class="position-badge">{{ p.position }}</span>{% endif %}
+            {% if p.height_cm %}<span>{{ p.height_cm }} cm</span>{% endif %}
+            {% if p.weight_kg %}<span>{{ p.weight_kg }} kg</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     {% endif %}
   </section>
 
@@ -55,14 +51,12 @@
     <div class="agent-panel">
       <form class="agent-form" id="agent-form">
         {% csrf_token %}
-        <input type="text" id="question-input" placeholder="e.g. What's Poland's record this season?" autocomplete="off">
+        <input type="text" id="question-input" placeholder="e.g. What's {{ team_name }}'s record this season?" autocomplete="off">
         <button type="submit" id="ask-button">Ask</button>
       </form>
       <div class="examples">
-        <button type="button" class="example-chip" data-q="Who's leading the standings?">Who's leading the standings?</button>
-        <button type="button" class="example-chip" data-q="How has Japan played in their last 5 games?">Japan's recent form</button>
-        <button type="button" class="example-chip" data-q="Poland vs Japan head to head">Poland vs Japan</button>
-        <button type="button" class="example-chip" data-q="Who's on Poland's roster?">Poland's roster</button>
+        <button type="button" class="example-chip" data-q="What's {{ team_name }}'s record this season?">Full record</button>
+        <button type="button" class="example-chip" data-q="How has {{ team_name }} played in their last 5 games?">Recent form</button>
       </div>
       <div class="answer-box" id="answer-box"></div>
     </div>
@@ -70,7 +64,7 @@
 </main>
 
 <footer>
-  Match data via Highlightly Volleyball API. Roster data via SportsAPI Pro. Scoped to the 2026 season (verified complete: 116/116 matches).
+  Roster data via SportsAPI Pro. Individual performance stats (kills, blocks, aces) aren't available through any source checked — see project README.
 </footer>
 
 <script>
