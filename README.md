@@ -25,6 +25,7 @@ rather than making something up.
 - [Usage](#usage)
 - [Architecture](#architecture)
 - [Testing](#testing)
+- [Evaluation](#evaluation)
 - [Data scope & known limitations](#data-scope--known-limitations)
 - [Status](#status)
 
@@ -179,6 +180,18 @@ disables CSRF checks and would silently hide a regression there), input
 validation, and error passthrough. The Gemini call itself is mocked, so
 tests don't burn API quota.
 
+## Evaluation
+
+An automated check of the agent against the database: 49 questions generated from `vnl.db`, expected answers computed with plain SQL, and the agent graded on whether it matched.
+
+**48 / 49 correct (98%)** on the run of 2026-10-04.
+
+```bash
+python eval/run_eval.py
+```
+
+The one miss was a player lookup without a team name; the agent can only search rosters by team. Method, per-category results, the failure analysis and the limitations of this test are in [`eval/README.md`](eval/README.md).
+
 ## Data scope & known limitations
 
 - Scoped to the **2026 men's VNL season only**. 2024/2025 were dropped
@@ -210,4 +223,5 @@ tests don't burn API quota.
 - [x] `.env`-based API key handling
 - [x] Player roster data (SportsAPI Pro), verified against real 2026 squad
 - [x] Automated tests for the ask-agent endpoint (CSRF, validation, errors)
+- [x] Automated evaluation of the agent against the database (49 questions, 98%)
 - [ ] Deployment
