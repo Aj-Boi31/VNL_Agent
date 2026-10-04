@@ -1,40 +1,47 @@
 # Agent evaluation
 
-An automated check of how often the agent answers correctly, graded against the database itself.
+A script that asks the agent 49 questions and checks the answers against the database.
 
-**Result (2026-10-04): 48 / 49 correct (98%).** Full per-question output is in [`results.csv`](results.csv) and the summary is in [`RESULTS.md`](RESULTS.md).
-
-| Category | Correct | Total |
+| Run | Result | Notes |
 |---|---|---|
-| Standings (who finished where) | 7 | 7 |
-| Preliminary-round wins | 6 | 6 |
-| Head-to-head winner | 8 | 8 |
-| Recent form (last 5 matches) | 6 | 6 |
-| Roster: player position | 8 | 8 |
-| Roster: player height | 5 | 6 |
-| Unavailable stats (should decline) | 5 | 5 |
-| Unknown team (should say so) | 3 | 3 |
+| 1 | **48 / 49** (98%) | One miss: a player lookup with no team name |
+| 2 | **49 / 49** (100%) | Same 49 questions, after I added a `find_player` tool to fix that miss |
+
+The second run is **not an independent test**. I fixed the failure the first run showed and then re-ran the same questions, so a pass was expected. The honest read is "found one gap, fixed it". A fresh set of questions would be the proper next test.
+
+Per-question output is in [`results.csv`](results.csv) (run 2) and [`results_run1_before_find_player.csv`](results_run1_before_find_player.csv) (run 1). The summary is in [`RESULTS.md`](RESULTS.md).
 
 ## How it works
 
-- `run_eval.py` generates the questions from `vnl.db` with a fixed random seed, so the same 49 questions are produced every run.
-- Each expected answer is computed with plain SQL, independently of the agent's own tool functions, so the agent is checked against the data and not against itself.
-- Each question is sent to the real agent (`agent.gemini_agent.ask`, live Gemini calls with the normal model fallback chain).
-- Grading is deterministic string/regex matching. Head-to-head questions ask for the winner's name first, and the grader checks the winner appears before the loser.
+- `run_eval.py` builds the questions from `vnl.db` with a fixed random seed, so you get the same 49 every time.
+- The expected answers come from plain SQL, not from the agent's own tool functions. The agent is checked against the data, not against itself.
+- Each question goes to the real agent (`agent.gemini_agent.ask`, live Gemini calls, normal model fallback).
+- Grading is string / regex matching. For head-to-head I ask for the winner's name first and check it comes before the loser's.
 
 ```bash
-python eval/run_eval.py            # asks all questions, needs GEMINI_API_KEY
+python eval/run_eval.py            # asks all 49 questions, needs GEMINI_API_KEY
 python eval/run_eval.py --rescore  # re-grades the saved answers without calling the API
 ```
 
-## The one failure
+| Category | Questions |
+|---|---|
+| Standings | 7 |
+| Preliminary-round wins | 6 |
+| Head-to-head winner | 8 |
+| Recent form (last 5) | 6 |
+| Player position | 8 |
+| Player height | 6 |
+| Stats the data doesn't have (should decline) | 5 |
+| Unknown team (should say so) | 3 |
 
-"How tall is Cory Schoenherr in cm?" The agent looked in the USA roster, did not find him, and said the data was unavailable. He is in the database, on a different team. `get_team_roster` only searches by team, so the agent has no way to find a player without knowing the team. This is a real gap in the tool set, not a grading artefact. A `find_player(name)` tool would fix it.
+## The miss in run 1
 
-## Limitations
+"How tall is Cory Schoenherr in cm?" The agent only had `get_team_roster`, which needs a team name. With no team given it guessed USA, didn't find him, and said the data wasn't available. He's on Canada. I added `find_player(name)` to search by name, and run 2 answered it correctly (203 cm).
 
-- One run, 49 questions, all single-fact lookups. It does not test multi-step reasoning, follow-up questions or ambiguous phrasing.
-- Exact-match grading can reject a correct answer worded unexpectedly and can accept a vague one that happens to contain the expected token.
-- The questions were written by the same person who built the agent, not by independent users.
-- The first run flagged one answer as wrong because the scorer rejected a number followed by a full stop ("they won 3."). That was a bug in the scorer, not the agent. It was fixed and the saved answers were re-graded with `--rescore`, not re-asked.
-- Results depend on the Gemini models available on the free tier on the run date.
+## Limits
+
+- 49 questions, one run each, all single-fact lookups. It doesn't test multi-step questions, follow-ups or oddly phrased ones.
+- I wrote the questions, the scorer and the agent, so it isn't independent.
+- String matching can reject a right answer that's worded differently, and can accept a vague one that happens to contain the right word.
+- Run 1 also had a scorer bug: it rejected a number followed by a full stop ("they won 3."). That was my bug, not the agent's. I fixed it and re-graded the saved answers with `--rescore` instead of asking again.
+- LLM answers vary between runs, and results depend on which free-tier Gemini models were available that day.

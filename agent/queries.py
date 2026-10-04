@@ -334,6 +334,39 @@ def get_team_roster(team: str) -> dict:
         conn.close()
 
 
+def find_player(name: str) -> dict:
+    """Look up a player by name when you don't know which team they play for.
+
+    Args:
+        name: full or partial player name, e.g. "Schoenherr" or "Cory Schoenherr".
+
+    Returns:
+        dict with up to 5 matching players (team, position, height, weight,
+        jersey number, date of birth, country).
+    """
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT p.name, t.name AS team, p.position, p.height_cm, p.weight_kg,
+                   p.jersey_number, p.date_of_birth, p.country
+            FROM players p
+            JOIN teams t ON t.id = p.team_id
+            WHERE LOWER(p.name) LIKE LOWER(?)
+            ORDER BY p.name
+            LIMIT 5
+            """,
+            (f"%{name}%",),
+        ).fetchall()
+
+        if not rows:
+            return {"error": f"No player found matching '{name}'."}
+
+        return {"players": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     # Quick manual smoke test -- run directly with `python agent/queries.py`
     import json

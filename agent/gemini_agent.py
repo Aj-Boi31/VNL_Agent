@@ -27,6 +27,7 @@ from agent.queries import (
     get_head_to_head,
     get_recent_form,
     get_standings,
+    find_player,
 )
 
 load_dotenv()  # picks up .env in the current working directory
@@ -70,7 +71,8 @@ record there may look different from `get_standings` (which only reflects
 the 12-game preliminary round). If this discrepancy is relevant to the
 question, briefly explain why.
 
-`get_team_roster` returns player name, position, height, weight, age, and
+If the user asks about a player without naming their team, call `find_player`
+first to look them up by name. `get_team_roster` returns player name, position, height, weight, age, and
 nationality only. It does NOT include individual performance statistics
 (kills, blocks, aces, digs, points, etc.) -- that data isn't available in
 this system. If asked for a player's stats, say so plainly rather than
@@ -82,7 +84,7 @@ formatting syntax would show up as literal asterisks. Use plain sentences
 or simple dash-prefixed lines ("- Poland: 3-0") instead.
 """
 
-TOOLS = [get_team_results, get_head_to_head, get_recent_form, get_standings, get_team_roster]
+TOOLS = [get_team_results, get_head_to_head, get_recent_form, get_standings, get_team_roster, find_player]
 
 
 def _get_client():
