@@ -2,7 +2,6 @@ import json
 
 from django.http import JsonResponse
 from django.shortcuts import render
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from agent.queries import get_standings, get_team_roster
@@ -43,7 +42,6 @@ def team_detail(request, team_name):
     return render(request, "tracker/team_detail.html", context)
 
 
-@csrf_exempt  # simple demo endpoint; see note in README about tightening this for real deployment
 @require_POST
 def ask_agent(request):
     """POST endpoint the dashboard's question box calls via fetch().
