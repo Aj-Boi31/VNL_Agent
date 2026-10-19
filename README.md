@@ -66,16 +66,18 @@ The 6 tools: `get_standings`, `get_team_results`, `get_head_to_head`, `get_recen
 ## Does it work?
 
 ```bash
-python manage.py test          # 6 tests on the ask endpoint
-python eval/run_eval.py        # 49 questions graded against the database
+python manage.py test              # 6 tests on the ask endpoint
+python ingestion/verify_data.py    # checks the data against the tournament format and official results
+python eval/run_eval.py            # 49 questions graded against the database
 ```
 
 - **Tests** cover CSRF enforcement, input validation and error handling. Gemini is mocked, so they don't use API quota.
+- **Data check:** `verify_data.py` confirms the database has 18 teams, 108 preliminary matches (every team plays 12) and 8 knockout matches, 116 in total, which is what the 2026 format gives. It also checks that the final (Poland 3-2 USA), USA's quarter-final (3-0 Italy) and semi-final (3-2 Japan) and the bronze winner (Slovenia) match the [Volleyball World match report](https://en.volleyballworld.com/volleyball/competitions/volleyball-nations-league/news/poland-defend-vnl-title-outlasting-usa-in-five-set-ningbo-final) and [USA Volleyball](https://usavolleyball.org/story/u-s-men-to-play-for-2026-vnl-gold-after-dramatic-win-over-previously-unbeaten-japan/). The other knockout results aren't confirmed on an official page, only checked for consistency.
 - **Evaluation:** 48/49 on the first run. The miss was a player lookup with no team name, so I added `find_player` and re-ran to 49/49. That second run used the same questions, so it isn't an independent test. The method and limits are in [`eval/README.md`](eval/README.md).
 
 ## Problems I ran into
 
-- **The first data source cut results off without saying.** TheSportsDB's free tier returned about 15 matches for a season that has 116. I only caught it by checking against Wikipedia.
+- **The first data source cut results off without saying.** TheSportsDB's free tier returned only a fraction of the season's 116 matches, with nothing to warn me. That's why I check the match counts against the tournament format.
 - **The second source was incomplete for 2024 and 2025** (80/104 and 89/116 matches). I scoped the project to 2026, where all 116 matches are there, instead of shipping partial data.
 - **Gemini free-tier quota is per model.** The agent tries a chain of models in order and only moves on when it gets a quota error.
 - **The setup shifted under me.** A model I'd planned on was retired, the recommended calling pattern changed, and an SDK bug closed the HTTP client early. I fixed each by reading the current docs and GitHub issues.
