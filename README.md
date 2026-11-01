@@ -2,7 +2,9 @@
 
 Ask questions about the 2026 Volleyball Men's Nations League in plain English and get answers from real match data. A Gemini agent picks the right database query for each question, so it doesn't guess scores or standings.
 
-![Ask the agent a question and get a grounded answer from real match data](docs/dashboard-demo.png)
+![Asking the dashboard three live questions, then the eval, data check and tests that guard it](docs/demo.gif)
+
+The GIF is a real run: three live questions to the dashboard, then the project's own eval (48/49 before `find_player`, 49/49 after), data check and tests. The eval part re-grades the saved answers from each run, so it doesn't call Gemini. Rebuild it with `pip install Pillow playwright` and `python docs/demo/make_demo_gif.py`.
 
 ## What you'll see
 
